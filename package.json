@@ -1,0 +1,13 @@
+{
+  "name": "trade-copier",
+  "version": "2.0.0",
+  "private": true,
+  "description": "NinjaTrader remote trade copier relay and control panel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Copier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ground:#16211F; --raised:#1E2E2B; --rule:#2C403C; --rule-soft:#243733;
+    --bone:#E8E4DA; --dim:#93A09C; --faint:#5E706C;
+    --long:#4FD1A5; --short:#E8735E; --signal:#E3A93C;
+    --sans:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--ground); color:var(--bone); font-family:var(--sans);
+    font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:640px;margin:0 auto;padding:0 20px 64px}
+
+  /* ---------- top bar ---------- */
+  .bar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 0 16px;border-bottom:1px solid var(--rule);
+  }
+  .mark{font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:-.01em}
+  .mark span{color:var(--faint)}
+  .beat{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
+  .lamp{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+  .lamp.on{background:var(--long);box-shadow:0 0 0 3px rgba(79,209,165,.16)}
+  .lamp.warn{background:var(--signal);box-shadow:0 0 0 3px rgba(227,169,60,.16)}
+  .lamp.live{animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  @media (prefers-reduced-motion:reduce){.lamp.live{animation:none}}
+
+  /* ---------- hero: the mirror ---------- */
+  .mirror{padding:30px 0 26px;border-bottom:1px solid var(--rule)}
+  .mirror h1{
+    font-size:13px;font-weight:500;color:var(--dim);margin:0 0 14px;letter-spacing:.01em;
+  }
+  .chips{display:flex;flex-wrap:wrap;gap:10px}
+  .chip{
+    border:1px solid var(--rule);border-radius:3px;padding:10px 14px;min-width:112px;
+    background:var(--raised);
+  }
+  .chip .sym{font-family:var(--mono);font-size:12px;color:var(--dim);display:block}
+  .chip .qty{font-family:var(--mono);font-size:26px;font-weight:600;line-height:1.15;display:block}
+  .chip.long .qty{color:var(--long)}
+  .chip.short .qty{color:var(--short)}
+  .flat{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--faint)}
+  .flat small{font-family:var(--sans);font-size:13px;font-weight:400;color:var(--dim);display:block;margin-top:4px}
+
+  /* ---------- roster ---------- */
+  .section{padding:26px 0 8px}
+  .section h2{font-size:13px;font-weight:500;color:var(--dim);margin:0 0 4px}
+  .row{
+    display:flex;align-items:center;gap:12px;
+    padding:14px 0;border-bottom:1px solid var(--rule-soft);
+  }
+  .row:last-of-type{border-bottom:0}
+  .who{flex:1;min-width:0}
+  .who b{font-weight:500;font-size:15px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .who i{font-style:normal;font-size:12.5px;color:var(--dim);font-family:var(--mono)}
+  .seen{font-family:var(--mono);font-size:12.5px;color:var(--faint);flex:none}
+  .lead-tag{color:var(--signal);font-family:var(--mono);font-size:11.5px}
+  .x{
+    background:none;border:0;color:var(--faint);font-size:19px;line-height:1;
+    cursor:pointer;padding:4px 2px;flex:none;font-family:var(--mono);
+  }
+  .x:hover,.x:focus-visible{color:var(--short)}
+  .empty{color:var(--dim);font-size:14px;padding:14px 0}
+
+  /* ---------- controls ---------- */
+  button,input{font-family:inherit;font-size:15px}
+  .btn{
+    background:var(--raised);color:var(--bone);border:1px solid var(--rule);
+    border-radius:3px;padding:11px 16px;cursor:pointer;
+  }
+  .btn:hover,.btn:focus-visible{border-color:var(--dim)}
+  .btn.primary{background:var(--bone);color:var(--ground);border-color:var(--bone);font-weight:500}
+  .btn.primary:hover{background:#fff}
+  .btn.wide{width:100%}
+  .btn:disabled{opacity:.45;cursor:default}
+  .add{display:flex;gap:8px;margin-top:12px}
+  .add input{
+    flex:1;min-width:0;background:var(--ground);border:1px solid var(--rule);
+    border-radius:3px;color:var(--bone);padding:11px 12px;
+  }
+  .add input:focus{outline:2px solid var(--dim);outline-offset:-1px;border-color:transparent}
+
+  /* ---------- code reveal ---------- */
+  .code{
+    margin-top:16px;border:1px solid var(--signal);border-radius:3px;
+    background:rgba(227,169,60,.06);padding:18px;
+  }
+  .code p{margin:0 0 10px;font-size:13px;color:var(--dim)}
+  .code .val{
+    font-family:var(--mono);font-size:clamp(20px,6vw,27px);font-weight:600;
+    letter-spacing:.06em;color:var(--signal);word-break:break-all;
+  }
+  .code .foot{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+
+  /* ---------- stop ---------- */
+  .stop{margin-top:38px;padding-top:22px;border-top:1px solid var(--rule)}
+  .stop p{font-size:13px;color:var(--dim);margin:0 0 12px}
+  .btn.danger{border-color:var(--short);color:var(--short);background:transparent}
+  .btn.danger:hover{background:rgba(232,115,94,.1)}
+  .halted{
+    border:1px solid var(--short);border-radius:3px;padding:16px;
+    background:rgba(232,115,94,.08);margin-bottom:16px;
+  }
+  .halted b{color:var(--short);display:block;margin-bottom:6px}
+  .halted p{margin:0 0 12px;color:var(--dim);font-size:13.5px}
+
+  /* ---------- gate ---------- */
+  .gate{max-width:360px;margin:14vh auto 0;padding:0 20px}
+  .gate h1{font-family:var(--mono);font-size:19px;font-weight:600;margin:0 0 8px}
+  .gate p{color:var(--dim);font-size:14px;margin:0 0 20px}
+  .gate input{
+    width:100%;background:var(--raised);border:1px solid var(--rule);border-radius:3px;
+    color:var(--bone);padding:12px;margin-bottom:10px;
+  }
+  .gate input:focus{outline:2px solid var(--dim);outline-offset:-1px}
+  .err{color:var(--short);font-size:13.5px;min-height:20px;margin:6px 0 0}
+  .hidden{display:none}
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+    background:var(--bone);color:var(--ground);padding:10px 18px;border-radius:3px;
+    font-size:14px;font-weight:500;z-index:9;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ sign in / first run ============ -->
+<div class="gate hidden" id="gate">
+  <h1>copier<span style="color:var(--faint)">.admin</span></h1>
+  <p id="gateLead">Enter your password.</p>
+  <input type="password" id="pw1" placeholder="Password" autocomplete="current-password">
+  <input type="password" id="pw2" class="hidden" placeholder="Confirm password" autocomplete="new-password">
+  <button class="btn primary wide" id="gateBtn">Sign in</button>
+  <p class="err" id="gateErr"></p>
+</div>
+
+<!-- ============ panel ============ -->
+<div class="wrap hidden" id="panel">
+
+  <div class="bar">
+    <div class="mark">copier<span>.admin</span></div>
+    <div class="beat"><span class="lamp" id="lamp"></span><span id="beatText">connecting</span></div>
+  </div>
+
+  <div class="mirror">
+    <h1 id="mirrorLead">Your position</h1>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="section">
+    <h2 id="rosterLead">Who is connected</h2>
+    <div id="roster"></div>
+
+    <div class="add">
+      <input id="newName" placeholder="Name, e.g. dave" maxlength="20" autocomplete="off">
+      <button class="btn" id="addFollower">Add follower</button>
+    </div>
+    <div style="margin-top:8px">
+      <button class="btn" id="addLeader" style="font-size:13.5px;padding:8px 12px">Add leader</button>
+    </div>
+
+    <div class="code hidden" id="codeBox">
+      <p id="codeFor"></p>
+      <div class="val" id="codeVal"></div>
+      <div class="foot">
+        <button class="btn" id="copyCode">Copy code</button>
+        <button class="btn" id="hideCode">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stop">
+    <div class="halted hidden" id="haltedBox">
+      <b>Everyone is stopped</b>
+      <p>Followers were sent flat and are ignoring new trades. Resuming sends them
+         back to whatever you are holding right now, which may re-enter positions.</p>
+      <button class="btn" id="resumeBtn">Resume copying</button>
+    </div>
+    <div id="stopWrap">
+      <p>Sends every follower flat and stops copying until you resume. Your own
+         account is untouched.</p>
+      <button class="btn danger wide" id="stopBtn">Stop everyone and go flat</button>
+    </div>
+    <p style="margin-top:22px;font-size:12.5px;color:var(--faint)">
+      Signed in. <a href="#" id="signOut" style="color:var(--dim)">Sign out</a>
+    </p>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let firstRun = false, timer = null;
+
+function toast(msg){
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 1900);
+}
+
+async function api(path, body){
+  const r = await fetch('/admin/api/' + path, {
+    method: body ? 'POST' : 'GET',
+    headers: body ? {'Content-Type':'application/json'} : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+}
+
+/* ---------------- gate ---------------- */
+
+async function boot(){
+  const r = await api('hello');
+  firstRun = !!r.data.needsSetup;
+
+  if (r.data.signedIn) return showPanel();
+
+  $('gate').classList.remove('hidden');
+  if (firstRun){
+    $('gateLead').textContent = 'Choose a password. This is the only thing protecting your copier.';
+    $('pw2').classList.remove('hidden');
+    $('pw1').setAttribute('autocomplete','new-password');
+    $('gateBtn').textContent = 'Create password';
+  }
+  $('pw1').focus();
+}
+
+$('gateBtn').onclick = async () => {
+  const pw = $('pw1').value;
+  $('gateErr').textContent = '';
+
+  if (firstRun){
+    if (pw.length < 10) return $('gateErr').textContent = 'Use at least 10 characters.';
+    if (pw !== $('pw2').value) return $('gateErr').textContent = 'The two passwords do not match.';
+  }
+  if (!pw) return;
+
+  const r = await api(firstRun ? 'setup' : 'login', { password: pw });
+  if (!r.ok) return $('gateErr').textContent = r.data.error || 'That did not work.';
+
+  $('gate').classList.add('hidden');
+  showPanel();
+};
+
+[$('pw1'), $('pw2')].forEach(el => el.addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('gateBtn').click();
+}));
+
+$('signOut').onclick = async (e) => {
+  e.preventDefault();
+  await api('logout', {});
+  location.reload();
+};
+
+/* ---------------- panel ---------------- */
+
+function showPanel(){
+  $('gate').classList.add('hidden');
+  $('panel').classList.remove('hidden');
+  refresh();
+  if (timer) clearInterval(timer);
+  timer = setInterval(refresh, 3000);
+}
+
+function ago(s){
+  if (s < 0) return 'never';
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s/60) + 'm';
+  return Math.floor(s/3600) + 'h';
+}
+
+async function refresh(){
+  const r = await api('state');
+  if (r.status === 401) return location.reload();
+  if (!r.ok) return;
+  render(r.data);
+}
+
+function render(s){
+  const leader = s.members.find(m => m.role === 'leader');
+  const leaderOn = leader && leader.seen >= 0 && leader.seen < 30;
+
+  // top bar
+  const lamp = $('lamp');
+  lamp.className = 'lamp' + (s.halted ? ' warn' : leaderOn ? ' on live' : '');
+  $('beatText').textContent = s.halted ? 'stopped'
+    : leaderOn ? 'live' : leader ? 'leader offline' : 'no leader yet';
+
+  // the mirror
+  const chips = $('chips');
+  chips.innerHTML = '';
+  const pos = (s.payload || '').split(';').filter(Boolean);
+
+  if (s.halted){
+    $('mirrorLead').textContent = 'Copying is stopped';
+    chips.innerHTML = '<div class="flat">—<small>Followers were sent flat</small></div>';
+  } else if (!pos.length){
+    $('mirrorLead').textContent = 'Your position';
+    chips.innerHTML = '<div class="flat">flat<small>Nothing open, nothing mirrored</small></div>';
+  } else {
+    $('mirrorLead').textContent = 'Mirroring now';
+    for (const p of pos){
+      const i = p.lastIndexOf(':');
+      const sym = p.slice(0, i), q = parseInt(p.slice(i+1), 10);
+      const d = document.createElement('div');
+      d.className = 'chip ' + (q > 0 ? 'long' : 'short');
+      d.innerHTML = '<span class="sym"></span><span class="qty"></span>';
+      d.querySelector('.sym').textContent = sym;
+      d.querySelector('.qty').textContent = (q > 0 ? '+' : '') + q;
+      chips.appendChild(d);
+    }
+  }
+
+  // roster
+  const followers = s.members.filter(m => m.role === 'follower');
+  const live = followers.filter(m => m.seen >= 0 && m.seen < 60).length;
+  $('rosterLead').textContent = followers.length
+    ? live + ' of ' + followers.length + ' following' : 'Who is connected';
+
+  const roster = $('roster');
+  roster.innerHTML = '';
+
+  if (!s.members.length){
+    roster.innerHTML = '<div class="empty">Nobody yet. Add a leader first, then your friends.</div>';
+  }
+
+  for (const m of s.members.slice().sort((a,b) => a.role === 'leader' ? -1 : b.role === 'leader' ? 1 : 0)){
+    const on = m.seen >= 0 && m.seen < 60;
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML =
+      '<span class="lamp' + (on ? ' on' : '') + '"></span>' +
+      '<span class="who"><b></b><i></i></span>' +
+      '<span class="seen"></span>' +
+      '<button class="x" title="Remove">&times;</button>';
+    row.querySelector('b').textContent = m.name;
+    row.querySelector('i').innerHTML = m.role === 'leader'
+      ? '<span class="lead-tag">leader</span>'
+      : (m.size || (m.enrolled ? 'follower' : 'not set up yet'));
+    row.querySelector('.seen').textContent = ago(m.seen);
+    row.querySelector('.x').onclick = () => remove(m.name);
+    roster.appendChild(row);
+  }
+
+  // stop / resume
+  $('haltedBox').classList.toggle('hidden', !s.halted);
+  $('stopWrap').classList.toggle('hidden', !!s.halted);
+}
+
+/* ---------------- actions ---------------- */
+
+async function invite(role){
+  const name = $('newName').value.trim();
+  if (!name) return $('newName').focus();
+
+  const r = await api('invite', { name, role });
+  if (!r.ok) return toast(r.data.error || 'Could not add them');
+
+  $('newName').value = '';
+  $('codeFor').textContent = 'One-time code for ' + r.data.name +
+    '. It locks to the first computer that uses it.';
+  $('codeVal').textContent = r.data.code;
+  $('codeBox').classList.remove('hidden');
+  $('codeBox').scrollIntoView({ behavior:'smooth', block:'nearest' });
+  refresh();
+}
+
+$('addFollower').onclick = () => invite('follower');
+$('addLeader').onclick  = () => invite('leader');
+$('hideCode').onclick   = () => $('codeBox').classList.add('hidden');
+
+$('copyCode').onclick = async () => {
+  const v = $('codeVal').textContent;
+  try { await navigator.clipboard.writeText(v); toast('Code copied'); }
+  catch { toast(v); }
+};
+
+async function remove(name){
+  if (!confirm('Remove ' + name + '?\n\nThey stop copying within about 25 seconds. Any position they already hold stays open.')) return;
+  await api('revoke', { name });
+  toast(name + ' removed');
+  refresh();
+}
+
+$('stopBtn').onclick = async () => {
+  if (!confirm('Send every follower flat and stop copying?\n\nYour own account is not touched.')) return;
+  await api('halt', { halt: true });
+  refresh();
+};
+
+$('resumeBtn').onclick = async () => {
+  if (!confirm('Resume copying?\n\nFollowers will be sent to whatever you are holding right now. If you have a position open, they will re-enter it.')) return;
+  await api('halt', { halt: false });
+  refresh();
+};
+
+boot();
+</script>
+</body>
+</html>
