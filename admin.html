@@ -53,6 +53,10 @@
   .chip .qty{font-family:var(--mono);font-size:26px;font-weight:600;line-height:1.15;display:block}
   .chip.long .qty{color:var(--long)}
   .chip.short .qty{color:var(--short)}
+  .chip .prot{font-family:var(--mono);font-size:11.5px;color:var(--faint);display:block;margin-top:6px;white-space:pre}
+  .chip .prot b{font-weight:600}
+  .chip .prot .sl{color:var(--short)}
+  .chip .prot .tp{color:var(--long)}
   .flat{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--faint)}
   .flat small{font-family:var(--sans);font-size:13px;font-weight:400;color:var(--dim);display:block;margin-top:4px}
 
@@ -314,13 +318,26 @@ function render(s){
   } else {
     $('mirrorLead').textContent = 'Mirroring now';
     for (const p of pos){
-      const i = p.lastIndexOf(':');
-      const sym = p.slice(0, i), q = parseInt(p.slice(i+1), 10);
+      // "MNQ 12-26:2:sl=24100.25:tp=24310.5" — sl / tp are optional
+      const f = p.split(':');
+      if (f.length < 2) continue;
+      const sym = f[0], q = parseInt(f[1], 10);
+      let sl = '', tp = '';
+      for (const x of f.slice(2)){
+        if (x.startsWith('sl=')) sl = x.slice(3);
+        else if (x.startsWith('tp=')) tp = x.slice(3);
+      }
       const d = document.createElement('div');
       d.className = 'chip ' + (q > 0 ? 'long' : 'short');
-      d.innerHTML = '<span class="sym"></span><span class="qty"></span>';
+      d.innerHTML = '<span class="sym"></span><span class="qty"></span><span class="prot"></span>';
       d.querySelector('.sym').textContent = sym;
       d.querySelector('.qty').textContent = (q > 0 ? '+' : '') + q;
+      const prot = d.querySelector('.prot');
+      if (sl || tp){
+        prot.innerHTML = (sl ? '<b class="sl">SL</b> ' + sl : '') + (sl && tp ? '  ' : '') + (tp ? '<b class="tp">TP</b> ' + tp : '');
+      } else {
+        prot.textContent = 'no stop / target';
+      }
       chips.appendChild(d);
     }
   }
