@@ -20,6 +20,11 @@
 //
 //  Everything published is a FULL position snapshot, so a missed poll
 //  costs nothing: the next one puts the follower right again.
+//
+//  Stream frame:  seq|stamped|payload|leaderAgeMs
+//    seq        - clock-based, so it keeps rising across server restarts
+//    leaderAge  - ms since the leader last reported; followers hold when
+//                 this is large instead of acting on a stale snapshot
 // =====================================================================
 
 const http   = require('http');
@@ -43,6 +48,11 @@ const log  = (...a) => console.log(new Date().toISOString(), ...a);
 
 // ---------------------------------------------------------------- state
 
+// seq must keep rising ACROSS RESTARTS. It used to start at 0 on every boot,
+// so a follower that had seen seq 57 before a restart would never be answered
+// again (the server only speaks when seq > since) and would silently miss
+// every change, including "leader went flat". A millisecond clock is always
+// larger than anything handed out before it.
 let seq           = 0;      // bumped only when what followers should see changes
 let leaderPayload = '';     // what the leader says it holds
 let broadcast     = '';     // what followers are actually told (empty while halted)
@@ -50,18 +60,43 @@ let stamped       = Date.now();
 let halted        = false;
 let waiters       = [];     // parked follower responses
 
-function publish(next) {
-  if (next === broadcast) { stamped = Date.now(); return; }
+// Leader liveness. The leader posts every 5s whether or not anything changed.
+// If that stops, whatever we last heard is stale: a follower that connects
+// later must NOT act on it, or it opens a trade nobody is watching.
+const LEADER_STALE_MS = parseInt(process.env.LEADER_STALE_MS || '45000', 10);
+let leaderSeen  = 0;
+let leaderStale = true;
 
-  seq += 1;
+const leaderAge = () => (leaderSeen ? Date.now() - leaderSeen : -1);
+const nextSeq   = () => { seq = Math.max(seq + 1, Date.now()); return seq; };
+
+// Wire format, one line:  seq|stamped|payload|leaderAgeMs
+// Followers older than 2.2 read only the first three fields and ignore the rest.
+const frame = () => `${seq}|${stamped}|${broadcast}|${leaderAge()}`;
+
+function publish(next, force) {
+  if (next === broadcast && !force) { stamped = Date.now(); return; }
+
+  if (next !== broadcast) log('STATE', next || '(flat)');
+  nextSeq();
   broadcast = next;
   stamped = Date.now();
 
-  const body = `${seq}|${stamped}|${broadcast}`;
+  const body = frame();
   const flush = waiters;
   waiters = [];
   for (const w of flush) { try { send(w.res, 200, body); } catch (e) {} }
 }
+
+// Watchdog: when the leader goes quiet, wake every parked follower with the
+// same payload but a large leaderAge so they switch to "hold".
+setInterval(() => {
+  if (!leaderStale && leaderSeen && leaderAge() > LEADER_STALE_MS) {
+    leaderStale = true;
+    log('LEADER offline - followers told to hold');
+    publish(broadcast, true);
+  }
+}, 5000).unref();
 
 // ---------------------------------------------------------------- utils
 
@@ -173,7 +208,17 @@ const server = http.createServer(async (req, res) => {
       leaderPayload = next;
 
       db.members[m.name].lastSeen = Date.now();
-      if (!halted) publish(next);
+      leaderSeen = Date.now();
+
+      if (leaderStale) {
+        // Back from a gap. Force a frame so followers that were holding
+        // get a fresh leaderAge and resume.
+        leaderStale = false;
+        log('LEADER online');
+        publish(halted ? '' : next, true);
+      } else if (!halted) {
+        publish(next);
+      }
       return send(res, 200, `ok|${seq}`);
     }
 
@@ -191,7 +236,7 @@ const server = http.createServer(async (req, res) => {
 
       // seq 0 means nothing has ever been published. Park rather than send an
       // empty snapshot, which a follower would read as "go flat".
-      if (seq > 0 && seq > since) return send(res, 200, `${seq}|${stamped}|${broadcast}`);
+      if (seq > 0 && seq > since) return send(res, 200, frame());
 
       const waiter = { res };
       waiters.push(waiter);
@@ -266,7 +311,7 @@ const server = http.createServer(async (req, res) => {
           if (!inv.used && !db.members[inv.name])
             members.push({ name: inv.name, role: inv.role, size: null, enrolled: false, seen: -1 });
 
-        return json(res, 200, { payload: leaderPayload, halted, seq, members });
+        return json(res, 200, { payload: leaderPayload, halted, seq, members, leaderAge: leaderAge(), leaderStale });
       }
 
       if (p === '/admin/api/invite' && req.method === 'POST') {
